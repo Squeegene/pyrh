@@ -510,6 +510,22 @@ class Robinhood(SessionManager):
     #                           GET OPTIONS INFO                              #
     ###########################################################################
 
+    def get_instrument_id(self, stock):
+        return self.get_url(self.quote_data(stock)["instrument"])["id"]
+
+    def get_chain_id(self, stock):
+        instrument_id = self.get_instrument_id(stock)
+        stock = stock.replace(".","")
+        flag = 0
+        i = 0
+        while flag == 0:
+            symbol = self.get_url(endpoints.chain(instrument_id))["results"][i]["symbol"]
+            if symbol == stock:
+                flag = 1
+                return self.get_url(endpoints.chain(instrument_id))["results"][i]["id"]
+            else:
+                i += 1
+
     def get_options(self, stock, expiration_dates, option_type):
         """Get a list (chain) of options contracts belonging to a particular stock
 
@@ -534,6 +550,53 @@ class Robinhood(SessionManager):
                 endpoints.options(chain_id, _expiration_dates_string, option_type)
             )["results"]
         ]
+
+    def get_options_ids(self, stock, expiration_dates):
+        options_ids = []
+        options = self.get_options(stock, expiration_dates)
+        i = 0
+        while i < len(options):
+            options_ids.append(options[i]["id"])
+            i += 1
+        return options_ids
+
+    # Gets options from Chain ID instead of stock ticker
+    def get_options_fc(self, chain_id, expiration_dates):
+        if(type(expiration_dates) == list):
+            _expiration_dates_string = ",".join(expiration_dates)
+        else:
+            _expiration_dates_string = expiration_dates
+
+        # PAGINATION ISSUE FIXED HERE, BUT NOT FIXED IN GET_OPTIONS
+        endpoint = self.get_url(endpoints.options(chain_id, _expiration_dates_string))
+        options = endpoint["results"]
+
+        while (endpoint["next"] != None):
+            endpoint = self.get_url(endpoint["next"])
+            options.extend(endpoint["results"])
+
+        return options
+
+    # Get options IDs from Chain ID instead of stock ticker
+    def get_options_ids_fc(self, chain_id, expiration_dates):
+        options_ids = []
+        options = self.get_options_fc(chain_id, expiration_dates)
+        i = 0
+        while i < len(options):
+            options_ids.append([options[i]["id"], options[i]["strike_price"], options[i]["expiration_date"], options[i]["type"]])
+            i += 1
+        return options_ids
+
+    def get_options_expiration_dates(self, stock):
+        instrument_id = self.get_instrument_id(stock)
+        flag = 0
+        i = 0
+        while flag == 0:
+            symbol = self.get_url(endpoints.chain(instrument_id))["results"][i]["symbol"]
+            if symbol == stock:
+                return self.get_url(endpoints.chain(instrument_id))["results"][i]["expiration_dates"]
+            else:
+                i += 1
 
     def get_option_market_data(self, optionid):
         """Gets a list of market data for a given optionid.
